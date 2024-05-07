@@ -6,6 +6,14 @@ edition = "2021"
 resolver = "2"
 rust-version = "1.71"
 
+[lib]
+name = "esp32_gatt_ote"
+path = "src/lib.rs"
+
+[package.metadata.espflash]
+partition_table = "partitions/esp32-s3-wroom-1-n8r8.csv"
+baudrate = 921600
+
 [profile.release]
 opt-level = "s"
 
@@ -14,7 +22,7 @@ debug = true    # Symbols are nice and they don't increase the size on Flash
 opt-level = "z"
 
 [features]
-default = ["std", "embassy", "esp-idf-svc/native"]
+default = ["std", "esp-idf-svc/native", "experimental"]
 
 pio = ["esp-idf-svc/pio"]
 std = ["alloc", "esp-idf-svc/binstart", "esp-idf-svc/std"]
@@ -28,8 +36,12 @@ embassy = [
 ]
 
 [dependencies]
-log = { version = "0.4", default-features = false }
 esp-idf-svc = { version = "0.48", default-features = false }
+log = { version = "0.4", default-features = false }
+anyhow = { version = "1" }
+esp32-nimble = { version = "0.6" }
+md5 = "0.7.0"
+uuid = { version = "1.8", features = ["v4"] }
 
 [build-dependencies]
 embuild = "0.31.3"

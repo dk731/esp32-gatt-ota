@@ -1,0 +1,2 @@
+partition_table = "partitions/esp32-s3-wroom-1-n8r8.csv"
+baudrate = 921600
