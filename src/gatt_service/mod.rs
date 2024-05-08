@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use anyhow::Result;
 use esp32_nimble::{
     utilities::{mutex::Mutex, BleUuid},
-    uuid128, BLECharacteristic, BLEServer, NimbleProperties, OnWriteArgs,
+    uuid128, AttValue, BLECharacteristic, BLEConnDesc, BLEServer, NimbleProperties, OnWriteArgs,
 };
 use esp_idf_svc::{
     ota::EspOta,
@@ -42,11 +42,13 @@ impl OtaGattService {
         let service = server.create_service(uuids.service);
         let mut service = service.lock();
 
+        // service
+
         let new_service = Self {
             file_block: service.create_characteristic(uuids.file_block, NimbleProperties::WRITE),
             total_file_size: service.create_characteristic(
                 uuids.total_file_size,
-                NimbleProperties::READ | NimbleProperties::WRITE,
+                NimbleProperties::READ | NimbleProperties::WRITE | NimbleProperties::READ_ENC,
             ),
             file_hash: service.create_characteristic(
                 uuids.file_hash,
@@ -124,8 +126,25 @@ impl OtaGattService {
             .lock()
             .on_write(move |args| Self::command_handler(state_clone.clone(), args));
 
+        let state_clone = ota_state.clone();
+        ota_state
+            .lock()
+            .status
+            .lock()
+            .on_read(move |attr, desc| Self::status_handler(state_clone.clone(), attr, desc));
+
         Ok(())
     }
 
-    fn command_handler(ota_state: Arc<Mutex<Self>>, args: &mut OnWriteArgs) {}
+    fn command_handler(ota_state: Arc<Mutex<Self>>, args: &mut OnWriteArgs) {
+        // args.
+        // args.recv_data()
+    }
+
+    fn status_handler(ota_state: Arc<Mutex<Self>>, args: &mut AttValue, desc: &BLEConnDesc) {
+        // desc.
+        // desc.
+        // args.
+        // args.recv_data()
+    }
 }
