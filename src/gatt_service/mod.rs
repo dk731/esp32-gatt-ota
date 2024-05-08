@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use esp32_nimble::{
     utilities::{mutex::Mutex, BleUuid},
-    uuid128, BLECharacteristic, BLEServer, NimbleProperties,
+    uuid128, BLECharacteristic, BLEServer, NimbleProperties, OnWriteArgs,
 };
 use esp_idf_svc::{
     ota::EspOta,
@@ -28,12 +28,13 @@ pub struct OtaGattService {
     command: Arc<Mutex<BLECharacteristic>>,
     finished_upload: Arc<Mutex<BLECharacteristic>>,
 
+    // esp_ota
     esp_ota: EspOta,
     max_ota_size: usize,
 }
 
 impl OtaGattService {
-    pub fn new(server: &mut BLEServer, uuids: Option<OtaGattUuids>) -> Result<Self> {
+    pub fn new(server: &mut BLEServer, uuids: Option<OtaGattUuids>) -> Result<Arc<Mutex<Self>>> {
         let max_ota_size = Self::get_max_ota_size()?;
         let esp_ota = EspOta::new()?;
 
@@ -58,7 +59,8 @@ impl OtaGattService {
             esp_ota,
             max_ota_size,
         };
-        new_service.init_callbacks()?;
+        let new_service = Arc::new(Mutex::new(new_service));
+        Self::init_callbacks(new_service.clone())?;
 
         Ok(new_service)
     }
@@ -112,9 +114,18 @@ impl OtaGattService {
         }
     }
 
-    fn init_callbacks(&self) -> Result<()> {
+    fn init_callbacks(ota_state: Arc<Mutex<Self>>) -> Result<()> {
         // self.file_block.
+
+        let state_clone = ota_state.clone();
+        ota_state
+            .lock()
+            .command
+            .lock()
+            .on_write(move |args| Self::command_handler(state_clone.clone(), args));
 
         Ok(())
     }
+
+    fn command_handler(ota_state: Arc<Mutex<Self>>, args: &mut OnWriteArgs) {}
 }

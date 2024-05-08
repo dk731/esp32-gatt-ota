@@ -1,8 +1,8 @@
-mod gatt_server;
+mod gatt_service;
 use anyhow::Result;
 
 use esp32_nimble::{BLEDevice, BLEServer};
-use gatt_server::OtaGattService;
+use gatt_service::OtaGattService;
 
 /// Initialized new GATT server with OTA service
 ///
