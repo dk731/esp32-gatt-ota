@@ -1,4 +1,5 @@
 // mod gatt_service;
+pub mod ota_ble;
 // use anyhow::Result;
 
 // use esp32_nimble::{BLEDevice, BLEServer};
@@ -39,3 +40,5 @@
 
 //     Ok(())
 // }
+
+pub fn qwe() {}

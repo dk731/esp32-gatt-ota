@@ -42,10 +42,10 @@ esp-idf-svc = { git = "https://github.com/esp-rs/esp-idf-svc", branch = "gatt", 
 
 log = { version = "0.4", default-features = false }
 anyhow = { version = "1" }
-# esp32-nimble = { version = "0.6" }
 md5 = "0.7.0"
 uuid = { version = "1.8", features = ["v4"] }
 lazy_static = { version = "1.4" }
+
 
 # TODO: REMOVE! Temporary until the PR is merged: https://github.com/esp-rs/esp-idf-svc/pull/421
 [patch.crates-io]
