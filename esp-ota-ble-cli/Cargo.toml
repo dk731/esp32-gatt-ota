@@ -6,4 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ota_gatt = { path = "../ota-gatt" }
+esp-bluedroid = { path = "../esp-bluedroid" }
+esp-ota-ble = { path = "../esp-ota-ble" }

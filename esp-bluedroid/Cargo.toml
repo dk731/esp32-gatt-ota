@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.71"
 
 [lib]
-name = "esp-bluedroid"
+name = "esp_bluedroid"
 path = "src/lib.rs"
 
 [profile.release]

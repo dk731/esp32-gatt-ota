@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.71"
 
 [lib]
-name = "esp-ota-ble"
+name = "esp_ota_ble"
 path = "src/lib.rs"
 
 [package.metadata.espflash]
