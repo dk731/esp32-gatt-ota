@@ -52,9 +52,17 @@ fn main() -> Result<()> {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     // 1. Initialize NVS
-    let _nvs_default_partition = EspDefaultNvsPartition::take()?;
+    // let _nvs_default_partition = EspDefaultNvsPartition::take()?;
 
     let ota_ble = OtaBle::new(BleParams::default(), GattUuids::default())?;
+    ota_ble.subscribe_gap_event(|ev| {
+        log::info!("GAP Event (FROM MAIN): {:?}", ev);
+    });
+
+    ota_ble.subscribe_gatt_event(|gatt_if, ev| {
+        log::info!("GATT Event (FROM MAIN): {:?} {:?}", gatt_if, ev);
+    });
+
     ota_ble.start_service()?;
 
     // // Obtain gatt and gap instances

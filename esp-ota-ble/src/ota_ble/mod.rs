@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     mem::size_of,
+    rc::Rc,
     sync::{
         mpsc::{channel, Receiver, Sender},
         Arc, Mutex,
@@ -32,6 +33,7 @@ use lazy_static::lazy_static;
 
 use self::uuids::GattUuids;
 
+pub mod characteristic;
 mod commands;
 pub mod macros;
 pub mod uuids;
@@ -64,10 +66,18 @@ impl Default for BleParams {
     }
 }
 
+type GapCallback = Box<dyn FnMut(&BleGapEvent) + Send + 'static>;
+type GattCallback = Box<dyn FnMut(u8, &GattsEvent) + Send + 'static>;
+
 pub struct OtaBle {
     ble_uuids: GattUuids,
     ble_params: BleParams,
     service_handle: Mutex<Option<u16>>,
+
+    gap_callbacks: Mutex<Vec<GapCallback>>,
+    gatt_callbacks: Mutex<Vec<GattCallback>>,
+
+    connected_peers: Mutex<Vec<u16>>,
 
     // esp_ota
     esp_ota: EspOta,
@@ -97,6 +107,9 @@ impl OtaBle {
             ble_uuids,
             ble_params,
             service_handle: Mutex::new(None),
+            gap_callbacks: Mutex::new(Vec::new()),
+            gatt_callbacks: Mutex::new(Vec::new()),
+            connected_peers: Mutex::new(Vec::new()),
         });
         Self::init_ble(ota_ble.clone())?;
 
@@ -109,14 +122,36 @@ impl OtaBle {
         GAP.subscribe(move |event| {
             log::info!("GAP Event: {:?}", event);
 
-            ota_ble_clone.gap_event_handler(&event);
+            // First call user defined callbacks
+            ota_ble_clone
+                .gap_callbacks
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .for_each(|cb| cb(&event));
+
+            // Then call default event handler
+            if let Err(error) = ota_ble_clone.gap_event_handler(&event) {
+                log::error!("Error handling GAP event: {:?}", error);
+            }
         })?;
 
         let ota_ble_clone = ota_ble.clone();
         GATT.subscribe(move |(gatt_if, event)| {
             log::info!("GATT Event: {:?} {:?}", gatt_if, event);
 
-            ota_ble_clone.gatt_event_handler(gatt_if, &event).ok();
+            // First call user defined callbacks
+            ota_ble_clone
+                .gatt_callbacks
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .for_each(|cb| cb(gatt_if, &event));
+
+            // Then call default event handler
+            if let Err(error) = ota_ble_clone.gatt_event_handler(gatt_if, &event) {
+                log::error!("Error handling GATT event: {:?}", error);
+            }
         })?;
 
         GAP.set_adv_conf(&AdvConfiguration::default())?;
@@ -128,12 +163,37 @@ impl OtaBle {
         Ok(())
     }
 
-    fn gap_event_handler(&self, event: &BleGapEvent) {}
+    pub fn subscribe_gap_event<F>(&self, callback: F)
+    where
+        F: FnMut(&BleGapEvent) + Send + 'static,
+    {
+        self.gap_callbacks.lock().unwrap().push(Box::new(callback));
+    }
+
+    pub fn subscribe_gatt_event<F>(&self, callback: F)
+    where
+        F: FnMut(u8, &GattsEvent) + Send + 'static,
+    {
+        self.gatt_callbacks.lock().unwrap().push(Box::new(callback));
+    }
+
+    fn gap_event_handler(&self, event: &BleGapEvent) -> Result<()> {
+        // match event {
+        //     // BleGapEvent::
+        //     _ => {}
+        // }
+
+        Ok(())
+    }
 
     fn gatt_event_handler(&self, gatt_if: u8, event: &GattsEvent) -> Result<()> {
         match event {
             GattsEvent::ServiceRegistered { status, app_id } => {
-                if *status == GattStatus::Ok && *app_id == self.ble_params.ota_app_id {
+                if *app_id == self.ble_params.ota_app_id {
+                    if *status != GattStatus::Ok {
+                        return Err(anyhow::anyhow!("Failed to register OTA GATT service"));
+                    }
+
                     log::info!("OTA service registered");
 
                     GATT.create_service(
@@ -154,27 +214,54 @@ impl OtaBle {
                 service_handle,
                 service_id,
             } => {
-                if *status == GattStatus::Ok && service_id.id.uuid == self.ble_uuids.service {
+                if service_id.id.uuid == self.ble_uuids.service {
+                    if *status != GattStatus::Ok {
+                        return Err(anyhow::anyhow!("Failed to create OTA GATT service"));
+                    }
+
                     log::info!("OTA service created");
 
                     self.service_handle.lock().unwrap().replace(*service_handle);
 
                     // Create characteristics
                     self.add_ote_characteristics()?;
-                    GATT.start_service(*service_handle)?;
+                }
+            }
+            GattsEvent::CharacteristicAdded {
+                status,
+                attr_handle,
+                service_handle,
+                char_uuid,
+            } => {
+                if let Some(ota_handle) = self.service_handle.lock().unwrap().as_ref() {
+                    if *service_handle == *ota_handle {
+                        if *status != GattStatus::Ok {
+                            return Err(anyhow::anyhow!("Failed to add OTA characteristic"));
+                        }
+
+                        log::info!("OTA characteristic added: {:?}", char_uuid);
+
+                        // GATT.start_service(*service_handle)?;
+                    }
                 }
             }
             GattsEvent::ServiceStarted {
                 status,
                 service_handle,
             } => {
-                if *status == GattStatus::Ok {
-                    log::info!("OTA service started");
+                if let Some(ota_handle) = self.service_handle.lock().unwrap().as_ref() {
+                    if *service_handle == *ota_handle {
+                        if *status != GattStatus::Ok {
+                            return Err(anyhow::anyhow!("Failed to start OTA service"));
+                        }
+
+                        log::info!("OTA service started");
+                    }
                 }
             }
             GattsEvent::PeerConnected { .. } => {
                 // TODO: check if max connections reached before starting advertising
-                GAP.start_advertising().unwrap();
+                // GAP.start_advertising().unwrap();
             }
             _ => {}
         }
@@ -230,7 +317,7 @@ impl OtaBle {
         )?;
 
         // GATT.set_attr(attr_handle, data)
-        GATT.GATT.add_characteristic(
+        GATT.add_characteristic(
             service_handle,
             &GattCharacteristic {
                 uuid: self.ble_uuids.status.clone(),
